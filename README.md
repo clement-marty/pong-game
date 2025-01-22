@@ -1,5 +1,8 @@
 # Pong Game
 
+![Pong Menu Screenshot](/media/menu_screenshot.png)
+![Pong Game Screenshot](/media/game_screenshot.png)
+
 Welcome to the Pong Game! This is a classic arcade game where two players control paddles to hit a ball back and forth. The objective is to score points by getting the ball past the opponent's paddle.
 
 ## Modes
