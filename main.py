@@ -1,6 +1,8 @@
 import pygame
 import configparser
 
+
+from scripts.sounds import Sounds
 from scripts.game import Game, Bot
 from scripts.renderer import Renderer
 
@@ -23,12 +25,12 @@ def main() -> None:
     title_font = pygame.font.Font(config.get('assets', 'font'), 100)
     font = pygame.font.Font(config.get('assets', 'font'), 50)
     little_font = pygame.font.Font(config.get('assets', 'font'), 30)
-    menu_interaction_sound = pygame.mixer.Sound(config.get('assets', 'menu_interaction_sound'))
     points_to_win = config.getint('game', 'points_to_win')
 
     game: Game = None
     bot: Bot = None
     renderer = Renderer(screen, config)
+    sounds = Sounds(config)
 
     clock = pygame.time.Clock()
     fps = config.getint('screen', 'framerate')
@@ -45,21 +47,21 @@ def main() -> None:
             if event.type == pygame.KEYDOWN:
 
                 if event.key == pygame.K_ESCAPE:
-                    menu_interaction_sound.play()
+                    sounds.menu_interaction.play()
                     if game_running:
                         game_running = False
                     else:
                         running = False
 
                 if event.key == pygame.K_RETURN and not game_running:
-                    game = Game(config, screen.get_size())
+                    game = Game(config, screen.get_size(), sounds)
                     if play_with_bot:
                         bot = Bot(game, game.paddles.right)
                     game_running = True
 
                 if event.key == pygame.K_SPACE and not game_running:
                     play_with_bot = not play_with_bot
-                    menu_interaction_sound.play()
+                    sounds.menu_interaction.play()
               
 
         if game_running:

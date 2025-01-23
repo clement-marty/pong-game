@@ -3,11 +3,15 @@ import pygame
 import random
 import configparser
 
+from scripts.sounds import Sounds
+
+
 
 class Game:
 
-    def __init__(self, config: configparser.ConfigParser, screen_size: tuple[int, int]) -> None:
+    def __init__(self, config: configparser.ConfigParser, screen_size: tuple[int, int], sounds: Sounds) -> None:
         self.screen_width, self.screen_height = screen_size
+        self.sounds = sounds
         self.ball_radius = config.getint('ball', 'radius')
         self.inital_ball_speed = config.getint('ball', 'initial_speed')
         self.ball_acceleration = config.getint('ball', 'acceleration')
@@ -16,7 +20,8 @@ class Game:
             speed=config.getint('paddle', 'speed'),
             padding=config.getint('paddle', 'padding'),
             paddle_size=(config.getint('paddle', 'width'), config.getint('paddle', 'height')),
-            screen_size=screen_size
+            screen_size=screen_size,
+            game=self
         )
 
         self.balls = [Ball(
@@ -26,27 +31,16 @@ class Game:
             direction=self.random_ball_direction()
         )]
 
+        self.bonuses = Bonuses(
+            game=self,
+            max_amount=config.getint('bonus', 'maximum_amount'),
+            cooldown=config.getint('bonus', 'spawn_cooldown'),
+            radius=config.getint('bonus', 'radius'),
+            hitbox_radius=config.getint('bonus', 'hitbox_radius'),
+            yellow_bonus_speed=config.getint('bonus', 'yellow_bonus_speed')
+        )
+
         self.score = [0, 0]
-
-        self.max_bonuses = config.getint('bonus', 'maximum_amount')
-        self.bonus_cooldown = config.getint('bonus', 'spawn_cooldown')
-        self.bonus_hitbox_radius = config.getint('bonus', 'hitbox_radius')
-        self.bonus_eta = self.bonus_cooldown
-        self.bonus_types = ['yellow', 'blue', 'red']
-        self.bonus_weights = [.5, .25, .25]
-        self.bonuses: list[tuple[str, int, int]] = []
-
-        self.yellow_bonus_speed = config.getint('bonus', 'yellow_bonus_speed')
-        self.yellow_bonus_previous_speed: int = None
-
-        self.wall_collision_sound = pygame.mixer.Sound(config.get('assets', 'wall_collision_sound'))
-        self.paddle_collision_sound = pygame.mixer.Sound(config.get('assets', 'paddle_collision_sound'))
-        self.goal_sound = pygame.mixer.Sound(config.get('assets', 'goal_sound'))
-        self.yellow_bonus_sound = pygame.mixer.Sound(config.get('assets', 'yellow_bonus_sound'))
-        self.blue_bonus_sound = pygame.mixer.Sound(config.get('assets', 'blue_bonus_sound'))
-        self.red_bonus_sound = pygame.mixer.Sound(config.get('assets', 'red_bonus_sound'))
-        for sound in [self.wall_collision_sound, self.paddle_collision_sound, self.goal_sound, self.yellow_bonus_sound, self.blue_bonus_sound]:
-            sound.set_volume(config.getfloat('screen', 'sound_volume'))
 
 
     def random_ball_direction(self) -> tuple[int, int]:
@@ -64,46 +58,15 @@ class Game:
 
         # Collision with the paddles
         for paddle in [self.paddles.left, self.paddles.right]:
-            if paddle.check_collision(ball):
-                self.paddle_collision_sound.play()
-                
-                direction_angle = (math.pi/4) * (ball.y - paddle.y) / (paddle.h//2)
-                ball.direction = (math.cos(direction_angle) * (-1 if paddle == 'right' else 1), math.sin(direction_angle))
-
-                if ball.previous_speed:
-                    ball.speed = ball.previous_speed
-                    ball.previous_speed = None
-
+            paddle.check_collision(ball)
 
         # Collision with the top and bottom walls
         if ball.y - ball.radius < 0 or ball.y + ball.radius > self.screen_height:
             ball.direction = [ball.direction[0], -ball.direction[1]]
-            self.wall_collision_sound.play()
+            self.sounds.wall_collision.play()
 
         # Collision with the bonuses
-        for bonus, x, y in self.bonuses:
-            if (ball.x - x)**2 + (ball.y - y)**2 < (ball.radius + self.bonus_hitbox_radius)**2:
-                self.bonuses.remove((bonus, x, y))
-
-                if bonus == 'yellow':
-                    ball.previous_speed = ball.speed
-                    ball.speed = self.yellow_bonus_speed
-                    ball.direction = (ball.direction[0]/abs(ball.direction[0]), 1e-4)
-                    self.yellow_bonus_sound.play()
-
-                if bonus == 'blue':
-                    ball.position = list(self.random_position())
-                    self.blue_bonus_sound.play()
-
-                if bonus == 'red':
-                    self.balls.append(Ball(
-                        position=ball.position,
-                        radius=self.ball_radius*2//3,
-                        speed=ball.speed,
-                        direction=(-ball.direction[0], ball.direction[1])
-                    ))
-                    ball.radius = self.ball_radius*2//3
-                    self.red_bonus_sound.play()
+        self.bonuses.check_collision(ball)
 
 
     def check_goal(self, ball: 'Ball') -> str:
@@ -121,7 +84,7 @@ class Game:
             winner = self.check_goal(ball)
             if winner:
                 self.score[1 if winner == 'left' else 0] += 1
-                self.goal_sound.play()
+                self.sounds.goal.play()
 
                 if len(self.balls) == 1:
                     ball.position = [self.screen_width // 2, self.screen_height // 2]
@@ -133,26 +96,9 @@ class Game:
                     self.balls.remove(ball)
 
                 if len(self.balls) == 1:
-                    self.balls[0].radius = self.ball_radius
-                
+                    self.balls[0].radius = self.ball_radius     
         
-        self.update_bonuses(dt)
-
-
-    def update_bonuses(self, dt: float) -> None:
-        self.bonus_eta = max(0, self.bonus_eta - dt)
-        if self.bonus_eta == 0:
-            self.bonus_eta = self.bonus_cooldown
-
-            if len(self.bonuses) < self.max_bonuses:
-
-                n = random.random() * sum(self.bonus_weights)
-                i = -1
-                while n > 0:
-                    n -= self.bonus_weights[i+1]
-                    i += 1
-
-                self.bonuses.append((self.bonus_types[i], *self.random_position()))
+        self.bonuses.update(dt)
 
 
   
@@ -196,22 +142,23 @@ class Ball:
 
 class Paddles:
 
-    def __init__(self, speed: int, padding: int, paddle_size: tuple[int, int], screen_size: tuple[int, int]) -> None:
+    def __init__(self, speed: int, padding: int, paddle_size: tuple[int, int], screen_size: tuple[int, int], game) -> None:
         self.speed = speed
         self.padding = padding
         self.w, self.h = paddle_size
         self.screen_width, self.screen_height = screen_size
 
-        self.left = self.Paddle('left', self.padding, self.screen_height // 2, self.w, self.h, self.screen_height, self.speed)
-        self.right = self.Paddle('right', self.screen_width - self.padding, self.screen_height // 2, self.w, self.h, self.screen_height, self.speed)
+        self.left = self.Paddle('left', self.padding, self.screen_height // 2, self.w, self.h, self.screen_height, self.speed, game)
+        self.right = self.Paddle('right', self.screen_width - self.padding, self.screen_height // 2, self.w, self.h, self.screen_height, self.speed, game)
 
     class Paddle:
-        def __init__(self, paddle, x, y, w, h, max_y, speed) -> None:
+        def __init__(self, paddle, x, y, w, h, max_y, speed, game) -> None:
             self.paddle = paddle
             self.x, self.y = x, y
             self.w, self.h = w, h
             self.max_y = max_y
             self.speed = speed
+            self.game = game
 
         @property
         def position(self) -> tuple[int, int]: return self.x, self.y
@@ -219,9 +166,108 @@ class Paddles:
         def __eq__(self, value): return value == self.paddle
 
         def check_collision(self, ball: Ball) -> bool:
-            return ball.x - ball.radius <= self.x + self.w//2 and ball.x + ball.radius >= self.x - self.w//2 \
-                and ball.y + ball.radius > self.y - self.h//2 and ball.y - ball.radius < self.y + self.h//2
+            if ball.x - ball.radius <= self.x + self.w//2 and ball.x + ball.radius >= self.x - self.w//2 \
+                and ball.y + ball.radius > self.y - self.h//2 and ball.y - ball.radius < self.y + self.h//2:
+
+                self.game.sounds.paddle_collision.play()
+                direction_angle = (math.pi/4) * (ball.y - self.y) / (self.h//2)
+                ball.direction = (math.cos(direction_angle) * (-1 if self == 'right' else 1), math.sin(direction_angle))
+
+                if ball.previous_speed:
+                    ball.speed = ball.previous_speed
+                    ball.previous_speed = None
         
         def move(self, direction: int, dt: float) -> None:
             self.y += self.speed * direction * dt
             self.y = max(self.h//2, min(self.max_y - self.h//2, self.y))
+
+
+class Bonuses:
+
+    def __init__(self, game: Game, max_amount, cooldown, radius, hitbox_radius, yellow_bonus_speed) -> None:
+        self.game = game
+        self.max = max_amount
+        self.cooldown = cooldown
+        self.radius = radius
+        self.hitbox_radius = hitbox_radius
+
+        self.blue = self.BlueBonus()
+        self.yellow = self.YellowBonus(yellow_bonus_speed)
+        self.red = self.RedBonus()
+        self.bonus_types = [self.yellow, self.blue, self.red]
+
+        self.eta = self.cooldown
+        self.list: list[tuple[str, int, int]] = []
+
+    def update(self, dt: float) -> None:
+        self.eta = max(0, self.eta - dt)
+        if self.eta == 0:
+            self.eta = self.cooldown
+
+            if len(self.list) < self.max:
+
+                weights = []
+                for bonus in self.bonus_types:
+                    weights.append(bonus.weight)
+
+                n = random.random() * sum(weights)
+                i = -1
+                while n > 0:
+                    n -= weights[i+1]
+                    i += 1
+
+                self.list.append((self.bonus_types[i].color, *self.game.random_position()))
+
+    def check_collision(self, ball: Ball) -> None:
+        for bonus, x, y in self.list:
+            if (ball.x - x)**2 + (ball.y - y)**2 < (ball.radius + self.hitbox_radius)**2:
+                self.list.remove((bonus, x, y))
+
+                for bonus_type in self.bonus_types:
+                    if bonus == bonus_type:
+                        bonus_type.interact(ball, self.game)
+                        break
+
+
+    class BonusType:
+        def __init__(self, color: str, weight): self.color,self.weight = color, weight
+        def __eq__(self, value): return value == self.color
+        def interact(self, ball: Ball, game: Game): raise NotImplementedError
+
+    class YellowBonus(BonusType):
+
+        def __init__(self, speed: int):
+            super().__init__('yellow', 2)
+            self.speed = speed
+
+        def interact(self, ball: Ball, game: Game) -> None:
+            ball.previous_speed = ball.speed
+            ball.speed = self.speed
+            ball.direction = (ball.direction[0]/abs(ball.direction[0]), 1e-4)
+            game.sounds.yellow_bonus.play()
+
+
+    class BlueBonus(BonusType):
+
+        def __init__(self):
+            super().__init__('blue', 1)
+        
+        def interact(self, ball: Ball, game: Game) -> None:
+            ball.position = list(game.random_position())
+            game.sounds.blue_bonus.play()
+
+
+    class RedBonus(BonusType):
+
+        def __init__(self):
+            super().__init__('red', 1)
+
+        def interact(self, ball: Ball, game: Game) -> None:
+            game.balls.append(Ball(
+                position=ball.position,
+                radius=game.ball_radius*2//3,
+                speed=ball.speed,
+                direction=(-ball.direction[0], ball.direction[1])
+            ))
+            ball.radius = game.ball_radius*2//3
+            game.sounds.red_bonus.play()

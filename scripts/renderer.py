@@ -2,7 +2,7 @@ import time
 import pygame
 import configparser
 
-from scripts.game import Ball
+from scripts.game import Ball, Bonuses
 
 
 class Renderer:
@@ -25,14 +25,13 @@ class Renderer:
             pygame.draw.rect(self.screen, '#ffffff', pygame.Rect(x - pw//2, y - ph//2, pw, ph))
 
 
-    def render_bonuses(self, bonuses: list[tuple[str, int, int]]) -> None:
-        radius = self.config.getint('bonus', 'radius')
-        for bonus, x, y in bonuses:
+    def render_bonuses(self, bonuses: Bonuses) -> None:
+        for bonus, x, y in bonuses.list:
             color = ''
             if bonus == 'yellow': color = '#ffff80'
             if bonus == 'blue': color = '#8080ff'
             if bonus == 'red': color = '#ff8080'
-            pygame.draw.circle(self.screen, color, (x, y), radius)
+            pygame.draw.circle(self.screen, color, (x, y), bonuses.radius)
 
 
     
