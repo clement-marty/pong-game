@@ -105,16 +105,54 @@ class Game:
 class Bot:
 
     THRESHOLD = 20
+    HARD_MODE_THRESHOLD = 3
 
-    def __init__(self, game: Game, paddle: 'Paddles.Paddle') -> None:
+    def __init__(self, game: Game, paddle: 'Paddles.Paddle', hard_mode: bool = False) -> None:
         self.game = game
         self.paddle = paddle
+        self.hard_mode = hard_mode
 
     def update(self, dt: float) -> None:
+        if self.hard_mode:
+            self.hard_update(dt)
+        else:
+            self.normal_update(dt)
+
+    def normal_update(self, dt: float) -> None:
         closest_ball = min(self.game.balls, key=lambda ball: abs(ball.x - self.paddle.x))
         dy = closest_ball.y - self.paddle.y
         if abs(dy) > self.THRESHOLD:
             self.paddle.move(1 if dy > 0 else -1, dt)
+
+    def hard_update(self, dt: float) -> None:
+        filtered_balls = list(filter(lambda ball: ball.direction[0] * (1 if self.paddle == 'right' else -1) > 0, self.game.balls))
+        if filtered_balls != []:
+            times_to_reach_paddle = [(self.paddle.x - ball.x) / (ball.speed * ball.direction[0]) for ball in filtered_balls]
+            closest_ball_id = times_to_reach_paddle.index(min(times_to_reach_paddle))
+            closest_ball = filtered_balls[closest_ball_id]
+            predicted_y = closest_ball.y + closest_ball.direction[1] * closest_ball.speed * times_to_reach_paddle[closest_ball_id]
+
+
+            # Reflect the ball off the top and bottom walls
+            while predicted_y < 0 or predicted_y > self.game.screen_height:
+                if predicted_y < 0:
+                    predicted_y = -predicted_y
+                elif predicted_y > self.game.screen_height:
+                    predicted_y = 2 * self.game.screen_height - predicted_y
+
+            if self.game.bonuses.list != []:
+                angle = math.pi/2
+                for bonus, x, y in self.game.bonuses.list:
+                    a = math.atan2(predicted_y - y, self.paddle.x - x)
+                    if abs(a) < angle:
+                        angle = a
+
+                if abs(angle) < math.pi/4:
+                    predicted_y = predicted_y + angle/(math.pi/4) * self.paddle.h//2
+
+            dy = predicted_y - self.paddle.y
+            if abs(dy) > self.HARD_MODE_THRESHOLD:
+                self.paddle.move(1 if dy > 0 else -1, dt)
 
 
 

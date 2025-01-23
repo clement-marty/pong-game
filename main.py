@@ -37,6 +37,7 @@ def main() -> None:
     running = True
     game_running = False
     play_with_bot = False
+    hard_mode = False
     while running:
 
         for event in pygame.event.get():
@@ -56,11 +57,18 @@ def main() -> None:
                 if event.key == pygame.K_RETURN and not game_running:
                     game = Game(config, screen.get_size(), sounds)
                     if play_with_bot:
-                        bot = Bot(game, game.paddles.right)
+                        bot = Bot(game, game.paddles.right, hard_mode)
                     game_running = True
 
                 if event.key == pygame.K_SPACE and not game_running:
-                    play_with_bot = not play_with_bot
+                    if not play_with_bot:
+                        play_with_bot = True
+                    elif not hard_mode:
+                        hard_mode = True
+                    else:
+                        play_with_bot = False
+                        hard_mode = False
+                    game = None
                     sounds.menu_interaction.play()
               
 
@@ -92,10 +100,11 @@ def main() -> None:
             if game:
                 renderer.render_menu(
                     title_font, font, little_font, play_with_bot,
-                    winner='left' if game.score[0] == points_to_win else 'right' if game.score[1] == points_to_win else None
+                    winner='left' if game.score[0] == points_to_win else 'right' if game.score[1] == points_to_win else None,
+                    hard_mode=hard_mode
                 )
             else:
-                renderer.render_menu(title_font, font, little_font, play_with_bot)
+                renderer.render_menu(title_font, font, little_font, play_with_bot, hard_mode=hard_mode)
 
         pygame.display.flip()
         clock.tick(fps)

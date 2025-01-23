@@ -50,13 +50,14 @@ class Renderer:
         self.screen.blit(right_text, (w//2 + rw - dw, rh//2))
 
 
-    def render_menu(self, title_font: pygame.font.Font, text_font: pygame.font.Font, little_font: pygame.font.Font, play_with_bot: bool, winner: str = None) -> None:
+    def render_menu(self, title_font: pygame.font.Font, text_font: pygame.font.Font, little_font: pygame.font.Font, play_with_bot: bool, winner: str = None, hard_mode: bool = False) -> None:
         title = title_font.render('PONG', 1, '#ffffff')
         t1 = text_font.render('press [enter] to start', 1, '#ffffff')
         t2 = little_font.render(f'<player vs {'bot' if play_with_bot else 'player'} mode> press [space] to change mode', 1, '#ffffff')
         t3 = little_font.render('<player 1> press [z] and [s] to move the left paddle', 1, '#ffffff')
         t4 = little_font.render('<player 2> press [o] and [l] to move the right paddle', 1, '#ffffff')
         t5 = little_font.render('press [esc] to quit', 1, '#ffffff')
+        t6 = little_font.render(f'<{"hard" if hard_mode else "normal"}> difficulty', 1, '#ff8080' if hard_mode else '#ffffff')
         
 
         w, h = self.screen.get_size()
@@ -66,6 +67,7 @@ class Renderer:
         _, h3 = t3.get_size()
         _, h4 = t4.get_size()
         _, h5 = t5.get_size()
+        w6, h6 = t6.get_size()
 
         self.screen.fill('#000000')
         self.screen.blit(title, (w//2 - wt//2, h//4 - ht//2))
@@ -76,10 +78,12 @@ class Renderer:
         if not play_with_bot:
             self.screen.blit(t4, (h4//2, h - h4))
         self.screen.blit(t5, (h5//2, h5//2))
+        if play_with_bot:
+            self.screen.blit(t6, (w//2 - w6//2, h//2 + h1 + h2 - h6//2))
 
         if winner and time.time() % 1 < .5:
             player = 'player 1' if winner == 'left' else 'player 2' if not play_with_bot else 'bot'
             color = '#ff8080' if winner == 'right' and play_with_bot else '#80ff80'
-            t6 = text_font.render(f'<{player}> won', 1, color)
-            w6, h6 = t6.get_size()
-            self.screen.blit(t6, (w//2 - w6//2, 3*h//4 - ht//2))
+            t7 = text_font.render(f'<{player}> won', 1, color)
+            w7, h7 = t7.get_size()
+            self.screen.blit(t7, (w//2 - w7//2, 3*h//4 - ht//2))
