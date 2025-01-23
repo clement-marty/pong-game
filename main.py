@@ -54,7 +54,7 @@ def main() -> None:
                 if event.key == pygame.K_RETURN and not game_running:
                     game = Game(config, screen.get_size())
                     if play_with_bot:
-                        bot = Bot(game, 'right')
+                        bot = Bot(game, game.paddles.right)
                     game_running = True
 
                 if event.key == pygame.K_SPACE and not game_running:
@@ -67,19 +67,19 @@ def main() -> None:
             # Process player inputs
             keys = pygame.key.get_pressed()
             if keys[pygame.K_z]:
-                game.move_paddle('left', -1, dt=1/fps)
+                game.paddles.left.move(-1, dt=1/fps)
             if keys[pygame.K_s]:
-                game.move_paddle('left', 1, dt=1/fps)
+                game.paddles.left.move(1, dt=1/fps)
             if keys[pygame.K_o]:
-                game.move_paddle('right', -1, dt=1/fps)
+                game.paddles.right.move(-1, dt=1/fps)
             if keys[pygame.K_l]:
-                game.move_paddle('right', 1, dt=1/fps)
+                game.paddles.right.move(1, dt=1/fps)
 
             if play_with_bot:
                 bot.update(dt=1/fps)
             game.update(dt=1/fps)
 
-            renderer.render_game(game.balls, game.left_paddle_pos, game.right_paddle_pos)
+            renderer.render_game(game.balls, game.paddles.left.position, game.paddles.right.position)
             renderer.render_bonuses(game.bonuses)
             renderer.render_score(font, *game.score)
 

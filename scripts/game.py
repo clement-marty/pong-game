@@ -10,14 +10,14 @@ class Game:
         self.screen_width, self.screen_height = screen_size
         self.ball_radius = config.getint('ball', 'radius')
         self.inital_ball_speed = config.getint('ball', 'initial_speed')
-        self.paddle_speed = config.getint('paddle', 'speed')
-        self.paddle_padding = config.getint('paddle', 'padding')
-        self.paddle_height = config.getint('paddle', 'height')
-        self.paddle_width = config.getint('paddle', 'width')
-
         self.ball_acceleration = config.getint('ball', 'acceleration')
-        self.left_paddle_pos = [self.paddle_padding, self.screen_height // 2]
-        self.right_paddle_pos = [self.screen_width - self.paddle_padding, self.screen_height // 2]
+
+        self.paddles = Paddles(
+            speed=config.getint('paddle', 'speed'),
+            padding=config.getint('paddle', 'padding'),
+            paddle_size=(config.getint('paddle', 'width'), config.getint('paddle', 'height')),
+            screen_size=screen_size
+        )
 
         self.balls = [Ball(
             position=(self.screen_width // 2, self.screen_height // 2),
@@ -55,17 +55,25 @@ class Game:
         return (side * math.cos(angle), math.sin(angle))
     
     def random_position(self) -> tuple[int, int]:
-        x = random.random() * (self.screen_width - 8*self.paddle_padding) + 4*self.paddle_padding
-        y = random.random() * (self.screen_height - 4*self.paddle_padding) + 2*self.paddle_padding
+        x = random.random() * (self.screen_width - 8*self.paddles.padding) + 4*self.paddles.padding
+        y = random.random() * (self.screen_height - 4*self.paddles.padding) + 2*self.paddles.padding
         return x, y
 
     
     def check_collision(self, ball: 'Ball') -> None:
+
         # Collision with the paddles
-        if ball.x - ball.radius <= self.paddle_padding + self.paddle_width//2:
-            self.check_collision_with_paddle('left', ball)
-        elif ball.x + ball.radius >= self.screen_width - self.paddle_padding - self.paddle_width//2:
-            self.check_collision_with_paddle('right', ball)
+        for paddle in [self.paddles.left, self.paddles.right]:
+            if paddle.check_collision(ball):
+                self.paddle_collision_sound.play()
+                
+                direction_angle = (math.pi/4) * (ball.y - paddle.y) / (paddle.h//2)
+                ball.direction = (math.cos(direction_angle) * (-1 if paddle == 'right' else 1), math.sin(direction_angle))
+
+                if ball.previous_speed:
+                    ball.speed = ball.previous_speed
+                    ball.previous_speed = None
+
 
         # Collision with the top and bottom walls
         if ball.y - ball.radius < 0 or ball.y + ball.radius > self.screen_height:
@@ -98,34 +106,11 @@ class Game:
                     self.red_bonus_sound.play()
 
 
-    def check_collision_with_paddle(self, paddle: str, ball: 'Ball') -> None:
-        _, y = self.left_paddle_pos if paddle == 'left' else self.right_paddle_pos
-        if ball.y + ball.radius > y - self.paddle_height//2 and ball.y - ball.radius < y + self.paddle_height//2:
-
-            direction_angle = (math.pi/4) * (ball.y - y) / (self.paddle_height//2)
-            ball.direction = (math.cos(direction_angle) * (-1 if paddle == 'right' else 1), math.sin(direction_angle))
-
-            self.paddle_collision_sound.play()
-            
-            if ball.previous_speed:
-                ball.speed = ball.previous_speed
-                ball.previous_speed = None
-
-
     def check_goal(self, ball: 'Ball') -> str:
         return 'left' if (ball.x) < 0 \
             else 'right' if (ball.x) > self.screen_width \
             else None
-
-
-    def move_paddle(self, paddle: str, direction: int, dt: float) -> None:
-        if paddle == 'left':
-            self.left_paddle_pos[1] += self.paddle_speed * direction * dt
-            self.left_paddle_pos[1] = max(self.paddle_height//2, min(self.screen_height - self.paddle_height//2, self.left_paddle_pos[1]))
-        else:
-            self.right_paddle_pos[1] += self.paddle_speed * direction * dt
-            self.right_paddle_pos[1] = max(self.paddle_height//2, min(self.screen_height - self.paddle_height//2, self.right_paddle_pos[1]))
-
+    
     
     def update(self, dt: float) -> None:
         for ball in self.balls:
@@ -175,16 +160,15 @@ class Bot:
 
     THRESHOLD = 20
 
-    def __init__(self, game: Game, paddle: str) -> None:
+    def __init__(self, game: Game, paddle: 'Paddles.Paddle') -> None:
         self.game = game
         self.paddle = paddle
-        self.paddle_pos = game.left_paddle_pos if self.paddle == 'left' else game.right_paddle_pos
 
     def update(self, dt: float) -> None:
-        closest_ball = min(self.game.balls, key=lambda ball: abs(ball.x - self.paddle_pos[0]))
-        dy = closest_ball.y - self.paddle_pos[1]
+        closest_ball = min(self.game.balls, key=lambda ball: abs(ball.x - self.paddle.x))
+        dy = closest_ball.y - self.paddle.y
         if abs(dy) > self.THRESHOLD:
-            self.game.move_paddle(self.paddle, 1 if dy > 0 else -1, dt)
+            self.paddle.move(1 if dy > 0 else -1, dt)
 
 
 
@@ -208,3 +192,36 @@ class Ball:
     @property
     def y(self) -> int:
         return self.position[1]
+
+
+class Paddles:
+
+    def __init__(self, speed: int, padding: int, paddle_size: tuple[int, int], screen_size: tuple[int, int]) -> None:
+        self.speed = speed
+        self.padding = padding
+        self.w, self.h = paddle_size
+        self.screen_width, self.screen_height = screen_size
+
+        self.left = self.Paddle('left', self.padding, self.screen_height // 2, self.w, self.h, self.screen_height, self.speed)
+        self.right = self.Paddle('right', self.screen_width - self.padding, self.screen_height // 2, self.w, self.h, self.screen_height, self.speed)
+
+    class Paddle:
+        def __init__(self, paddle, x, y, w, h, max_y, speed) -> None:
+            self.paddle = paddle
+            self.x, self.y = x, y
+            self.w, self.h = w, h
+            self.max_y = max_y
+            self.speed = speed
+
+        @property
+        def position(self) -> tuple[int, int]: return self.x, self.y
+        
+        def __eq__(self, value): return value == self.paddle
+
+        def check_collision(self, ball: Ball) -> bool:
+            return ball.x - ball.radius <= self.x + self.w//2 and ball.x + ball.radius >= self.x - self.w//2 \
+                and ball.y + ball.radius > self.y - self.h//2 and ball.y - ball.radius < self.y + self.h//2
+        
+        def move(self, direction: int, dt: float) -> None:
+            self.y += self.speed * direction * dt
+            self.y = max(self.h//2, min(self.max_y - self.h//2, self.y))
